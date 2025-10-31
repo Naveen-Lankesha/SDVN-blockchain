@@ -30,10 +30,13 @@ app.post("/enrollAdmin", async (req, res, next) => {
 
 app.post("/enrollUser", async (req, res, next) => {
   try {
-    const { adminId, userId, orgID = "Org1" } = req.body || {};
+    const { adminId, userId, orgID = "Org1", role, vin } = req.body || {};
     if (!adminId || !userId)
       return res.status(400).send("adminId and userId are required");
-    const result = await helper.enrollUserSimple(adminId, userId, orgID);
+    const result = await helper.enrollUserSimple(adminId, userId, orgID, {
+      role,
+      vin,
+    });
     res.status(200).send({ success: true, data: result });
   } catch (err) {
     next(err);
@@ -43,12 +46,37 @@ app.post("/enrollUser", async (req, res, next) => {
 // sdvn-registration chaincode APIs
 app.post("/vehicles", async (req, res, next) => {
   try {
-    const { userId, vin, publicKey, orgID = "Org1" } = req.body || {};
+    const {
+      userId,
+      vin,
+      publicKey,
+      registrationStatus,
+      orgID = "Org1",
+    } = req.body || {};
     if (!userId || !vin || !publicKey)
       return res.status(400).send("userId, vin, publicKey are required");
     const result = await invoke.invokeTransactionArgs(
       "registerVehicle",
-      [vin, publicKey],
+      [vin, publicKey, registrationStatus || "registered"],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Trusted Authority: store VIN in authority list
+app.post("/ta/vins", async (req, res, next) => {
+  try {
+    const { userId, vin, orgID = "Org1" } = req.body || {};
+    if (!userId || !vin)
+      return res.status(400).send("userId and vin are required");
+    const result = await invoke.invokeTransactionArgs(
+      "storeVIN",
+      [vin],
       userId,
       orgID,
       "sdvn"
@@ -66,7 +94,7 @@ app.get("/vehicles/:vin", async (req, res, next) => {
     if (!userId)
       return res.status(400).send("userId is required as query param");
     const result = await query.evaluateTransactionArgs(
-      "readVehicle",
+      "getVehicle",
       [vin],
       userId,
       orgID,
@@ -78,15 +106,25 @@ app.get("/vehicles/:vin", async (req, res, next) => {
   }
 });
 
-app.patch("/vehicles/:vin/trust-score", async (req, res, next) => {
+// (removed) trust-score update endpoint; not part of the new spec
+
+// Controller/Vehicle: store location (keeps last 20)
+app.post("/vehicles/:vin/locations", async (req, res, next) => {
   try {
-    const { userId, newScore, orgID = "Org1" } = req.body || {};
     const { vin } = req.params;
-    if (!userId || newScore === undefined)
-      return res.status(400).send("userId and newScore are required");
+    const {
+      userId,
+      latitude,
+      longitude,
+      timestamp,
+      orgID = "Org1",
+    } = req.body || {};
+    if (!userId || latitude === undefined || longitude === undefined) {
+      return res.status(400).send("userId, latitude, longitude are required");
+    }
     const result = await invoke.invokeTransactionArgs(
-      "updateTrustScore",
-      [vin, String(newScore)],
+      "storeLocation",
+      [vin, String(latitude), String(longitude), timestamp || ""],
       userId,
       orgID,
       "sdvn"
@@ -97,23 +135,7 @@ app.patch("/vehicles/:vin/trust-score", async (req, res, next) => {
   }
 });
 
-app.get("/vehicles", async (req, res, next) => {
-  try {
-    const { userId, orgID = "Org1" } = req.query;
-    if (!userId)
-      return res.status(400).send("userId is required as query param");
-    const result = await query.evaluateTransactionArgs(
-      "queryAllVehicles",
-      [],
-      userId,
-      orgID,
-      "sdvn"
-    );
-    res.status(200).send({ success: true, data: result });
-  } catch (err) {
-    next(err);
-  }
-});
+// (removed) list vehicles endpoint; not required by the new spec
 
 // Error handler
 app.use((err, req, res, next) => {

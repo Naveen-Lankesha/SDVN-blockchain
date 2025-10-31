@@ -58,7 +58,8 @@ async function enrollAdminSimple(
 }
 
 // Register and enroll a client identity using an existing admin in wallet
-async function enrollUserSimple(adminID, userID, orgID = "Org1") {
+// Options may include attributes such as role and vin
+async function enrollUserSimple(adminID, userID, orgID = "Org1", options = {}) {
   const ccp = getCCP(orgID);
   const caOrg = ccp.organizations[orgID].certificateAuthorities[0];
   const caURL = ccp.certificateAuthorities[caOrg].url;
@@ -76,17 +77,57 @@ async function enrollUserSimple(adminID, userID, orgID = "Org1") {
 
   const provider = wallet.getProviderRegistry().getProvider(adminIdentity.type);
   const adminUser = await provider.getUserContext(adminIdentity, adminID);
-  const secret = await ca.register(
-    {
-      affiliation: `${orgID}.department1`.toLowerCase(),
-      enrollmentID: userID,
-      role: "client",
-    },
-    adminUser
-  );
+  // Build attributes (role, vin, plus any other provided)
+  const regAttrs = [];
+  if (options.role)
+    regAttrs.push({ name: "role", value: String(options.role), ecert: true });
+  if (options.vin)
+    regAttrs.push({ name: "vin", value: String(options.vin), ecert: true });
+  if (Array.isArray(options.attrs)) regAttrs.push(...options.attrs);
+
+  let secret;
+  try {
+    secret = await ca.register(
+      {
+        affiliation: `${orgID}.department1`.toLowerCase(),
+        enrollmentID: userID,
+        role: "client",
+        attrs: regAttrs,
+      },
+      adminUser
+    );
+  } catch (err) {
+    // If identity already registered in CA, attempt to reset its secret using IdentityService
+    const msg = (err && err.toString && err.toString()) || "";
+    if (msg.includes("already registered") || msg.includes("code: 74")) {
+      // generate a new secret and update identity on CA
+      const idService = ca.newIdentityService();
+      const newSecret = `sec-${Math.random().toString(36).slice(2, 10)}`;
+      try {
+        await idService.update(
+          {
+            id: userID,
+            affiliation: `${orgID}.department1`.toLowerCase(),
+            type: "client",
+            attrs: regAttrs,
+            secret: newSecret,
+          },
+          adminUser
+        );
+        secret = newSecret;
+      } catch (updateErr) {
+        // if update fails, rethrow original registration error for visibility
+        throw err;
+      }
+    } else {
+      throw err;
+    }
+  }
+
   const enrollment = await ca.enroll({
     enrollmentID: userID,
     enrollmentSecret: secret,
+    attr_reqs: regAttrs.map((a) => ({ name: a.name, optional: false })),
   });
   const x509Identity = {
     credentials: {
@@ -97,7 +138,12 @@ async function enrollUserSimple(adminID, userID, orgID = "Org1") {
     type: "X.509",
   };
   await wallet.put(userID, x509Identity);
-  return { statusCode: 200, message: `Enrolled ${userID} for ${orgID}` };
+  return {
+    statusCode: 200,
+    message: `Enrolled ${userID} for ${orgID}${
+      options.role ? " (role=" + options.role + ")" : ""
+    }${options.vin ? " (vin=" + options.vin + ")" : ""}`,
+  };
 }
 
 module.exports = { getCCP, enrollAdminSimple, enrollUserSimple };
