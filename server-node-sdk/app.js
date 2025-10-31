@@ -87,6 +87,25 @@ app.post("/ta/vins", async (req, res, next) => {
   }
 });
 
+// Trusted Authority/Controller: list all stored VINs and registration status
+app.get("/ta/vins", async (req, res, next) => {
+  try {
+    const { userId, orgID = "Org1" } = req.query;
+    if (!userId)
+      return res.status(400).send("userId is required as query param");
+    const result = await query.evaluateTransactionArgs(
+      "listVINStatuses",
+      [],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 app.get("/vehicles/:vin", async (req, res, next) => {
   try {
     const { userId, orgID = "Org1" } = req.query;

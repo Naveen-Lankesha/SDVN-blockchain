@@ -187,6 +187,52 @@ class SdvNRegistration extends Contract {
             last: entry,
         });
     }
+
+    // ---------- Admin/Controller: list all stored VINs and registration status ----------
+    async listVINStatuses(ctx) {
+        // Only controller or trustedAuthority can view the entire list
+        this.requireRole(ctx, ['controller', 'trustedAuthority']);
+
+        const results = [];
+        // Iterate over keys that start with the vin authority prefix
+        const startKey = 'vinreg:';
+        // endKey is the next ASCII character after ':' to bound the range
+        const endKey = 'vinreg;';
+        const iterator = await ctx.stub.getStateByRange(startKey, endKey);
+        try {
+            // Use explicit next() loop for broad compatibility across Fabric Node shim versions
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+                const res = await iterator.next();
+                if (res.done) break;
+                const { key, value } = res.value || {};
+                const text = value ? value.toString('utf8') : '';
+                let rec = {};
+                try {
+                    rec = text ? JSON.parse(text) : {};
+                } catch (_) {
+                    // ignore parse errors and proceed with defaults
+                }
+                const vin =
+                    rec.vin ||
+                    (key && key.startsWith(startKey)
+                        ? key.slice(startKey.length)
+                        : key);
+                // Check if a vehicle asset exists for this VIN
+                const vehKey = this.keyForVehicle(vin);
+                const vehBytes = await ctx.stub.getState(vehKey);
+                const registered = !!(vehBytes && vehBytes.length);
+                results.push({
+                    vin,
+                    storedAt: rec.createdAt || null,
+                    registered,
+                });
+            }
+        } finally {
+            await iterator.close();
+        }
+        return JSON.stringify(results);
+    }
 }
 
 module.exports = SdvNRegistration;
