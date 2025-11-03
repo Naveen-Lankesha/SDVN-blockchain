@@ -1,6 +1,7 @@
 'use strict';
 
 const { Contract } = require('fabric-contract-api');
+const wormhole = require('./wormhole');
 
 /**
  * SdvNRegistration contract with role-based access control.
@@ -118,6 +119,7 @@ class SdvNRegistration extends Contract {
             trustScoreBlackhole: 100,
             trustScorePoison: 100,
             trustScoreReplay: 100,
+            neighborArray: [],
             locations: [], // ring buffer of up to 20
             createdAt: this.txNowIso(ctx),
         };
@@ -232,6 +234,41 @@ class SdvNRegistration extends Contract {
             await iterator.close();
         }
         return JSON.stringify(results);
+    }
+
+    // ---------- Wormhole-related APIs (delegating to lib/wormhole.js) ----------
+    // Role: any vehicle can submit a vote about a VIN
+    async storeNeighborVote(
+        ctx,
+        vin,
+        neighborId,
+        vote,
+        longitude,
+        latitude,
+        timestamp
+    ) {
+        return wormhole.storeNeighborVote(
+            ctx,
+            this,
+            vin,
+            neighborId,
+            vote,
+            longitude,
+            latitude,
+            timestamp
+        );
+    }
+
+    // Role: only the specific vehicle for VIN can run crossValidation
+    async crossValidation(ctx, vin, longitudeV, latitudeV, timestampV) {
+        return wormhole.crossValidation(
+            ctx,
+            this,
+            vin,
+            longitudeV,
+            latitudeV,
+            timestampV
+        );
     }
 }
 

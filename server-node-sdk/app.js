@@ -156,6 +156,73 @@ app.post("/vehicles/:vin/locations", async (req, res, next) => {
 
 // (removed) list vehicles endpoint; not required by the new spec
 
+// Wormhole: store neighboring node vote for a vehicle
+app.post("/vehicles/:vin/votes", async (req, res, next) => {
+  try {
+    const { vin } = req.params;
+    const {
+      userId,
+      neighborId,
+      vote,
+      longitude,
+      latitude,
+      timestamp,
+      orgID = "Org1",
+    } = req.body || {};
+    if (!userId || !neighborId || vote === undefined || vote === null) {
+      return res
+        .status(400)
+        .send("userId, neighborId and vote (1 or 0) are required");
+    }
+    const result = await invoke.invokeTransactionArgs(
+      "storeNeighborVote",
+      [
+        vin,
+        String(neighborId),
+        String(vote),
+        String(longitude),
+        String(latitude),
+        timestamp || "",
+      ],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Wormhole: cross validate vehicle-reported location against neighbor votes
+app.post("/vehicles/:vin/cross-validate", async (req, res, next) => {
+  try {
+    const { vin } = req.params;
+    const {
+      userId,
+      longitudeV,
+      latitudeV,
+      timestampV,
+      orgID = "Org1",
+    } = req.body || {};
+    if (!userId || longitudeV === undefined || latitudeV === undefined) {
+      return res
+        .status(400)
+        .send("userId, longitudeV and latitudeV are required");
+    }
+    const result = await invoke.invokeTransactionArgs(
+      "crossValidation",
+      [vin, String(longitudeV), String(latitudeV), timestampV || ""],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Error handler
 app.use((err, req, res, next) => {
   res.status(400).send(err.message);
