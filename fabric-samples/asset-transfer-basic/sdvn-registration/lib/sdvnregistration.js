@@ -2,6 +2,7 @@
 
 const { Contract } = require('fabric-contract-api');
 const wormhole = require('./wormhole');
+const blackhole = require('./blackhole');
 
 /**
  * SdvNRegistration contract with role-based access control.
@@ -120,6 +121,7 @@ class SdvNRegistration extends Contract {
             trustScorePoison: 100,
             trustScoreReplay: 100,
             neighborArray: [],
+            neighborArrayBlackholeVotes: [],
             locations: [], // ring buffer of up to 20
             createdAt: this.txNowIso(ctx),
         };
@@ -269,6 +271,29 @@ class SdvNRegistration extends Contract {
             latitudeV,
             timestampV
         );
+    }
+
+    // ---------- Blackhole-related APIs (delegating to lib/blackhole.js) ----------
+    // Vehicle: submit a binary vote (1/0) about a VIN
+    async storeBlackholeNeighborVote(ctx, vin, neighborId, vote, timestamp) {
+        return blackhole.storeNeighborVoteBlackhole(
+            ctx,
+            this,
+            vin,
+            neighborId,
+            vote,
+            timestamp
+        );
+    }
+
+    // Controller: reduce trustScoreBlackhole by delta (default 1)
+    async reduceBlackholeScore(ctx, vin, delta) {
+        return blackhole.reduceTrustScoreBlackhole(ctx, this, vin, delta);
+    }
+
+    // Controller: evaluate majority of blackhole votes and penalize if majority is 0
+    async evaluateBlackholeVotes(ctx, vin, reduceBy) {
+        return blackhole.evaluateBlackholeVotes(ctx, this, vin, reduceBy);
     }
 }
 

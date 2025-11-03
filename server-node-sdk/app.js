@@ -223,6 +223,78 @@ app.post("/vehicles/:vin/cross-validate", async (req, res, next) => {
   }
 });
 
+// ---------------- Blackhole APIs ----------------
+// Vehicle: submit a blackhole vote (1/0) about a VIN
+app.post("/vehicles/:vin/blackhole/votes", async (req, res, next) => {
+  try {
+    const { vin } = req.params;
+    const {
+      userId,
+      neighborId,
+      vote,
+      timestamp,
+      orgID = "Org1",
+    } = req.body || {};
+    if (!userId || !neighborId || vote === undefined || vote === null) {
+      return res
+        .status(400)
+        .send("userId, neighborId and vote (1 or 0) are required");
+    }
+    const result = await invoke.invokeTransactionArgs(
+      "storeBlackholeNeighborVote",
+      [vin, String(neighborId), String(vote), timestamp || ""],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Controller: manually reduce trustScoreBlackhole by delta (default 1)
+app.post("/vehicles/:vin/blackhole/reduce", async (req, res, next) => {
+  try {
+    const { vin } = req.params;
+    const { userId, delta, orgID = "Org1" } = req.body || {};
+    if (!userId) {
+      return res.status(400).send("userId is required");
+    }
+    const result = await invoke.invokeTransactionArgs(
+      "reduceBlackholeScore",
+      [vin, String(delta ?? "")],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Controller: evaluate majority of blackhole votes; reduce if majority is 0
+app.post("/vehicles/:vin/blackhole/evaluate", async (req, res, next) => {
+  try {
+    const { vin } = req.params;
+    const { userId, reduceBy, orgID = "Org1" } = req.body || {};
+    if (!userId) {
+      return res.status(400).send("userId is required");
+    }
+    const result = await invoke.invokeTransactionArgs(
+      "evaluateBlackholeVotes",
+      [vin, String(reduceBy ?? "")],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Error handler
 app.use((err, req, res, next) => {
   res.status(400).send(err.message);
