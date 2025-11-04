@@ -338,6 +338,64 @@ app.post("/vehicles/:vin/blackhole/evaluate", async (req, res, next) => {
   }
 });
 
+// ---------------- Poison (routing data) APIs ----------------
+// Vehicle: submit a routing-data vote (1/0) about a VIN
+app.post("/vehicles/:vin/poison/votes", async (req, res, next) => {
+  try {
+    const { vin } = req.params;
+    const {
+      userId,
+      neighborId,
+      vote,
+      routingData,
+      timestamp,
+      orgID = "Org1",
+    } = req.body || {};
+    if (!userId || !neighborId || vote === undefined || vote === null) {
+      return res
+        .status(400)
+        .send("userId, neighborId and vote (1 or 0) are required");
+    }
+    const result = await invoke.invokeTransactionArgs(
+      "storePoisonNeighborRoutingVote",
+      [
+        vin,
+        String(neighborId),
+        String(vote),
+        JSON.stringify(routingData || {}),
+        timestamp || "",
+      ],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Vehicle (specific): cross-validate own routing data against neighbor votes
+app.post("/vehicles/:vin/poison/cross-validate", async (req, res, next) => {
+  try {
+    const { vin } = req.params;
+    const { userId, routingDataV, timestampV, orgID = "Org1" } = req.body || {};
+    if (!userId || !routingDataV) {
+      return res.status(400).send("userId and routingDataV are required");
+    }
+    const result = await invoke.invokeTransactionArgs(
+      "crossValidationPoison",
+      [vin, JSON.stringify(routingDataV || {}), timestampV || ""],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Error handler
 app.use((err, req, res, next) => {
   res.status(400).send(err.message);

@@ -4,6 +4,7 @@ const { Contract } = require('fabric-contract-api');
 const wormhole = require('./wormhole');
 const blackhole = require('./blackhole');
 const replay = require('./replay');
+const poison = require('./poison');
 
 /**
  * SdvNRegistration contract with role-based access control.
@@ -123,6 +124,7 @@ class SdvNRegistration extends Contract {
             trustScoreReplay: 100,
             neighborArray: [],
             neighborArrayBlackholeVotes: [],
+            neighborArrayRoutingData: [],
             locations: [], // ring buffer of up to 20
             createdAt: this.txNowIso(ctx),
         };
@@ -295,6 +297,38 @@ class SdvNRegistration extends Contract {
     // Controller: evaluate majority of blackhole votes and penalize if majority is 0
     async evaluateBlackholeVotes(ctx, vin, reduceBy) {
         return blackhole.evaluateBlackholeVotes(ctx, this, vin, reduceBy);
+    }
+
+    // ---------- Poison-related APIs (delegating to lib/poison.js) ----------
+    // Vehicle: submit a routing-data vote (1/0) about a VIN
+    async storePoisonNeighborRoutingVote(
+        ctx,
+        vin,
+        neighborId,
+        vote,
+        routingData,
+        timestamp
+    ) {
+        return poison.storeNeighborRoutingVote(
+            ctx,
+            this,
+            vin,
+            neighborId,
+            vote,
+            routingData,
+            timestamp
+        );
+    }
+
+    // Vehicle (specific): cross-validate own routing data against neighbor votes
+    async crossValidationPoison(ctx, vin, routingDataV, timestampV) {
+        return poison.crossValidationPoison(
+            ctx,
+            this,
+            vin,
+            routingDataV,
+            timestampV
+        );
     }
 
     // ---------- Replay attack mitigation APIs (delegating to lib/replay.js) ----------
