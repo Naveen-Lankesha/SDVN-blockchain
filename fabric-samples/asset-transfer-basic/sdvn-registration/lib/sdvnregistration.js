@@ -3,6 +3,7 @@
 const { Contract } = require('fabric-contract-api');
 const wormhole = require('./wormhole');
 const blackhole = require('./blackhole');
+const replay = require('./replay');
 
 /**
  * SdvNRegistration contract with role-based access control.
@@ -294,6 +295,23 @@ class SdvNRegistration extends Contract {
     // Controller: evaluate majority of blackhole votes and penalize if majority is 0
     async evaluateBlackholeVotes(ctx, vin, reduceBy) {
         return blackhole.evaluateBlackholeVotes(ctx, this, vin, reduceBy);
+    }
+
+    // ---------- Replay attack mitigation APIs (delegating to lib/replay.js) ----------
+    // Vehicle: receiver stores a flowId for the given sender VIN
+    async storeFlowIdReplay(ctx, senderVin, flowId, timestamp) {
+        return replay.storeFlowIdReplay(
+            ctx,
+            this,
+            senderVin,
+            flowId,
+            timestamp
+        );
+    }
+
+    // Vehicle: receiver checks whether the sender already sent the flowId in last 24h
+    async checkFlowIdReplay(ctx, senderVin, flowId) {
+        return replay.checkFlowIdReplay(ctx, this, senderVin, flowId);
     }
 }
 

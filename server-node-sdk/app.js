@@ -223,6 +223,49 @@ app.post("/vehicles/:vin/cross-validate", async (req, res, next) => {
   }
 });
 
+// ---------------- Replay attack mitigation APIs ----------------
+// Vehicle (receiver): store a flowId in the SENDER's vehicle record
+app.post("/vehicles/:senderVin/replay/flow-ids", async (req, res, next) => {
+  try {
+    const { senderVin } = req.params;
+    const { userId, flowId, timestamp, orgID = "Org1" } = req.body || {};
+    if (!userId || !flowId) {
+      return res.status(400).send("userId and flowId are required");
+    }
+    const result = await invoke.invokeTransactionArgs(
+      "storeFlowIdReplay",
+      [senderVin, String(flowId), timestamp || ""],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Vehicle (receiver): check if sender already sent the flowId in last 24 hours (also purges old)
+app.post("/vehicles/:senderVin/replay/check", async (req, res, next) => {
+  try {
+    const { senderVin } = req.params;
+    const { userId, flowId, orgID = "Org1" } = req.body || {};
+    if (!userId || !flowId) {
+      return res.status(400).send("userId and flowId are required");
+    }
+    const result = await invoke.invokeTransactionArgs(
+      "checkFlowIdReplay",
+      [senderVin, String(flowId)],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ---------------- Blackhole APIs ----------------
 // Vehicle: submit a blackhole vote (1/0) about a VIN
 app.post("/vehicles/:vin/blackhole/votes", async (req, res, next) => {
