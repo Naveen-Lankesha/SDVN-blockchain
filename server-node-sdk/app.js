@@ -87,6 +87,43 @@ app.post("/ta/vins", async (req, res, next) => {
   }
 });
 
+// Trusted Authority: bulk store a contiguous numeric VIN range (e.g. 1..120)
+app.post("/ta/vins/range", async (req, res, next) => {
+  try {
+    const { userId, start, end, orgID = "Org1" } = req.body || {};
+    if (!userId || start === undefined || end === undefined) {
+      return res.status(400).send("userId, start and end are required in body");
+    }
+    const s = Number(start);
+    const e = Number(end);
+    if (!Number.isInteger(s) || !Number.isInteger(e) || s <= 0 || e <= 0) {
+      return res.status(400).send("start and end must be positive integers");
+    }
+    if (s > e) {
+      return res.status(400).send("start cannot be greater than end");
+    }
+    // Optional safeguard: refuse extremely large ranges (>10k) to avoid long endorsement time
+    const maxRange = Number(process.env.MAX_VIN_RANGE) || 10000;
+    if (e - s + 1 > maxRange) {
+      return res
+        .status(413)
+        .send(
+          `Requested range too large (>${maxRange}). Split into smaller batches.`
+        );
+    }
+    const result = await invoke.invokeTransactionArgs(
+      "storeVINRange",
+      [String(s), String(e)],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Trusted Authority/Controller: list all stored VINs and registration status
 app.get("/ta/vins", async (req, res, next) => {
   try {

@@ -95,6 +95,45 @@ class SdvNRegistration extends Contract {
         return JSON.stringify(record);
     }
 
+    // Store a contiguous range of numeric VINs (e.g., 1..120)
+    // Only trustedAuthority; start and end must be positive integers and start <= end.
+    // Skips VINs already present; returns a summary with counts.
+    async storeVINRange(ctx, start, end) {
+        this.requireRole(ctx, ['trustedAuthority']);
+        const s = Number(start);
+        const e = Number(end);
+        if (!Number.isInteger(s) || !Number.isInteger(e) || s <= 0 || e <= 0) {
+            throw new Error('start and end must be positive integers');
+        }
+        if (s > e) throw new Error('start cannot be greater than end');
+        const added = [];
+        const skipped = [];
+        for (let vinNum = s; vinNum <= e; vinNum++) {
+            const vin = String(vinNum);
+            const key = this.keyForVinAuthority(vin);
+            const exists = await ctx.stub.getState(key);
+            if (exists && exists.length) {
+                skipped.push(vin);
+                continue;
+            }
+            const record = {
+                vin,
+                createdAt: this.txNowIso(ctx),
+                issuer: 'trustedAuthority',
+            };
+            await ctx.stub.putState(key, Buffer.from(JSON.stringify(record)));
+            added.push(vin);
+        }
+        return JSON.stringify({
+            range: { start: s, end: e },
+            totalRequested: e - s + 1,
+            addedCount: added.length,
+            skippedCount: skipped.length,
+            added,
+            skipped,
+        });
+    }
+
     // ---------- Controller APIs ----------
     // Register a vehicle if VIN exists in authority list
     async registerVehicle(ctx, vin, publicKey, registrationStatus) {
