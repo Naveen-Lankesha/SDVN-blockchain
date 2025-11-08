@@ -1,0 +1,7 @@
+# Ignore Hyperledger Fabric identity wallets
+# Matches any directory named 'wallet' anywhere in the repo
+wallet/
+
+# Explicit paths (redundant but kept for clarity)
+server-node-sdk/wallet/
+server-node-sdk/cert-script/wallet/
