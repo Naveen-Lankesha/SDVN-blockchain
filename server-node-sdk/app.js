@@ -375,6 +375,27 @@ app.post("/vehicles/:vin/blackhole/evaluate", async (req, res, next) => {
   }
 });
 
+// Reset trust scores for a vehicle (controller or trustedAuthority role required)
+app.post("/vehicles/:vin/trust/reset", async (req, res, next) => {
+  try {
+    const { vin } = req.params;
+    const { userId, orgID = "Org1" } = req.body || {};
+    if (!userId) {
+      return res.status(400).send("userId is required");
+    }
+    const result = await invoke.invokeTransactionArgs(
+      "resetTrustScores",
+      [vin],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ---------------- Poison (routing data) APIs ----------------
 // Vehicle: submit a routing-data vote (1/0) about a VIN
 app.post("/vehicles/:vin/poison/votes", async (req, res, next) => {

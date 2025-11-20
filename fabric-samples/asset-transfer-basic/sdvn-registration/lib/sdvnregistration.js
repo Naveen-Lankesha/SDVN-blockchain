@@ -201,6 +201,42 @@ class SdvNRegistration extends Contract {
         });
     }
 
+    // Reset all trust-related scores for a vehicle back to 100.
+    // Only controller (or trustedAuthority) can perform this reset; vehicles cannot.
+    async resetTrustScores(ctx, vin) {
+        this.requireRole(ctx, ['controller', 'trustedAuthority']);
+        if (!vin) throw new Error('vin is required');
+        const vehKey = this.keyForVehicle(vin);
+        const data = await ctx.stub.getState(vehKey);
+        if (!data || !data.length) throw new Error(`Vehicle ${vin} not found`);
+        const vehicle = JSON.parse(data.toString());
+        // Reset the underlying scores; overallTrustScore is derived when retrieving via getVehicle.
+        vehicle.trustedScoreSybil = 100;
+        vehicle.trustedScoreWromehole = 100;
+        vehicle.trustScoreBlackhole = 100;
+        vehicle.trustScorePoison = 100;
+        vehicle.trustScoreReplay = 100;
+        await ctx.stub.putState(vehKey, Buffer.from(JSON.stringify(vehicle)));
+        // Recompute overall for convenience in the response.
+        const scores = [
+            vehicle.trustedScoreSybil,
+            vehicle.trustedScoreWromehole,
+            vehicle.trustScoreBlackhole,
+            vehicle.trustScorePoison,
+            vehicle.trustScoreReplay,
+        ];
+        const overall = scores.reduce((a, b) => a + b, 0) / scores.length;
+        return JSON.stringify({
+            VIN: vin,
+            trustedScoreSybil: vehicle.trustedScoreSybil,
+            trustedScoreWromehole: vehicle.trustedScoreWromehole,
+            trustScoreBlackhole: vehicle.trustScoreBlackhole,
+            trustScorePoison: vehicle.trustScorePoison,
+            trustScoreReplay: vehicle.trustScoreReplay,
+            overallTrustScore: Math.round(overall),
+        });
+    }
+
     // ---------- Controller/Vehicle APIs ----------
     // Store a location update; keep only the 20 most recent
     async storeLocation(ctx, vin, latitude, longitude, timestamp) {
