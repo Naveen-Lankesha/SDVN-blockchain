@@ -327,4 +327,55 @@ module.exports = {
             purgedVotes: purgeCount,
         });
     },
+
+    /**
+     * Manually reduce trustScoreWormhole for a vehicle (v3.0).
+     * Role: controller only
+     * @param delta - Amount to reduce (default 1 if not provided or invalid)
+     * Also updates overallTrustScore after reduction.
+     */
+    async reduceWormholeScore(ctx, helpers, vin, delta) {
+        // RBAC: controller only
+        helpers.requireRole(ctx, ['controller']);
+
+        if (!vin) throw new Error('vin is required');
+
+        const vehKey = helpers.keyForVehicle(vin);
+        const data = await ctx.stub.getState(vehKey);
+        if (!data || !data.length) throw new Error(`Vehicle ${vin} not found`);
+        const vehicle = JSON.parse(data.toString());
+
+        // Parse delta; default to 1 if not provided or invalid
+        const reduction = Number(delta);
+        const actualDelta =
+            Number.isFinite(reduction) && reduction > 0 ? reduction : 1;
+
+        const before = Number(vehicle.trustedScoreWromehole);
+        const after = Math.max(0, before - actualDelta);
+        vehicle.trustedScoreWromehole = after;
+
+        // Update overallTrustScore: average of all 5 trust scores
+        const scores = [
+            Number(vehicle.trustedScoreSybil),
+            Number(vehicle.trustedScoreWromehole),
+            Number(vehicle.trustScoreBlackhole),
+            Number(vehicle.trustScorePoison),
+            Number(vehicle.trustScoreReplay),
+        ];
+        const valid = scores.filter((n) => Number.isFinite(n));
+        const overall = valid.length
+            ? valid.reduce((a, b) => a + b, 0) / valid.length
+            : 0;
+        vehicle.overallTrustScore = Math.round(overall);
+
+        await ctx.stub.putState(vehKey, Buffer.from(JSON.stringify(vehicle)));
+
+        return JSON.stringify({
+            vin,
+            before,
+            after,
+            reduction: actualDelta,
+            overallTrustScore: vehicle.overallTrustScore,
+        });
+    },
 };

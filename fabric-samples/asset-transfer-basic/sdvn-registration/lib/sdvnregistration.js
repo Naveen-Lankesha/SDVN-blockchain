@@ -366,6 +366,11 @@ class SdvNRegistration extends Contract {
         return wormhole.crossValidationV3(ctx, this, vin);
     }
 
+    // Controller: manually reduce trustScoreWormhole by delta (default 1)
+    async reduceWormholeScore(ctx, vin, delta) {
+        return wormhole.reduceWormholeScore(ctx, this, vin, delta);
+    }
+
     // ---------- Blackhole-related APIs (delegating to lib/blackhole.js) ----------
     // Vehicle: submit a binary vote (1/0) about a VIN
     async storeBlackholeNeighborVote(ctx, vin, neighborId, vote, timestamp) {
