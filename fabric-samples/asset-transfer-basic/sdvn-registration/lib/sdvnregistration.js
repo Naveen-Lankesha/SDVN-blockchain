@@ -216,6 +216,10 @@ class SdvNRegistration extends Contract {
         vehicle.trustScoreBlackhole = 100;
         vehicle.trustScorePoison = 100;
         vehicle.trustScoreReplay = 100;
+        // Reset neighbor arrays
+        vehicle.neighborArray = [];
+        vehicle.neighborArrayBlackholeVotes = [];
+        vehicle.neighborArrayRoutingData = [];
         await ctx.stub.putState(vehKey, Buffer.from(JSON.stringify(vehicle)));
         // Recompute overall for convenience in the response.
         const scores = [
