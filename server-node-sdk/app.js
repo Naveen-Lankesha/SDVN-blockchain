@@ -260,6 +260,49 @@ app.post("/vehicles/:vin/cross-validate", async (req, res, next) => {
   }
 });
 
+// ---------- V3.0 Wormhole APIs (controller-only simplified voting) ----------
+// Controller: store simplified vote (vote, timestamp) for a VIN
+app.post("/vehicles/:vin/votes/v3", async (req, res, next) => {
+  try {
+    const { vin } = req.params;
+    const { userId, vote, timestamp, orgID = "Org1" } = req.body || {};
+    if (!userId || vote === undefined || vote === null) {
+      return res.status(400).send("userId and vote (1 or 0) are required");
+    }
+    const result = await invoke.invokeTransactionArgs(
+      "storeNeighborVoteV3",
+      [vin, String(vote), timestamp || ""],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Controller: cross-validate using last 10 mins votes, update overallTrustScore, purge old votes
+app.post("/vehicles/:vin/cross-validate/v3", async (req, res, next) => {
+  try {
+    const { vin } = req.params;
+    const { userId, orgID = "Org1" } = req.body || {};
+    if (!userId) {
+      return res.status(400).send("userId is required");
+    }
+    const result = await invoke.invokeTransactionArgs(
+      "crossValidationV3",
+      [vin],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ---------------- Replay attack mitigation APIs ----------------
 // Vehicle (receiver): store a flowId in the SENDER's vehicle record
 app.post("/vehicles/:senderVin/replay/flow-ids", async (req, res, next) => {

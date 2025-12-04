@@ -181,4 +181,150 @@ module.exports = {
             considered: windowVotes.length,
         });
     },
+
+    // ---------- V3.0 Controller-only wormhole functions ----------
+    /**
+     * Store a simplified neighboring node vote (v3.0).
+     * Role: controller only
+     * Fields appended to vehicle.neighborArray:
+     *  - vote (1 or 0)
+     *  - timestamp (ISO string, uses tx timestamp if not provided)
+     */
+    async storeNeighborVoteV3(ctx, helpers, vin, vote, timestamp) {
+        // RBAC: controller only
+        helpers.requireRole(ctx, ['controller']);
+
+        if (!vin || vote === undefined || vote === null) {
+            throw new Error('vin and vote are required');
+        }
+        const v = Number(vote) === 1 ? 1 : 0;
+
+        const vehKey = helpers.keyForVehicle(vin);
+        const data = await ctx.stub.getState(vehKey);
+        if (!data || !data.length) throw new Error(`Vehicle ${vin} not found`);
+
+        const vehicle = JSON.parse(data.toString());
+        if (!Array.isArray(vehicle.neighborArray)) vehicle.neighborArray = [];
+
+        const entry = {
+            vote: v,
+            timestamp:
+                timestamp && String(timestamp).trim()
+                    ? String(timestamp)
+                    : helpers.txNowIso(ctx),
+        };
+
+        vehicle.neighborArray.push(entry);
+
+        await ctx.stub.putState(vehKey, Buffer.from(JSON.stringify(vehicle)));
+        return JSON.stringify({
+            vin,
+            lastVote: entry,
+            count: vehicle.neighborArray.length,
+        });
+    },
+
+    /**
+     * Cross-validate using simplified neighbor votes (v3.0).
+     * Role: controller only
+     * Logic:
+     *  - Consider votes from last 10 minutes
+     *  - If majority = 1: no change
+     *  - If majority = 0: reduce trustedScoreWromehole by 1
+     *  - Update overallTrustScore (average of all 5 trust scores)
+     *  - Purge votes older than 1 day (24 hours)
+     */
+    async crossValidationV3(ctx, helpers, vin) {
+        // RBAC: controller only
+        helpers.requireRole(ctx, ['controller']);
+
+        if (!vin) throw new Error('vin is required');
+
+        const vehKey = helpers.keyForVehicle(vin);
+        const data = await ctx.stub.getState(vehKey);
+        if (!data || !data.length) throw new Error(`Vehicle ${vin} not found`);
+        const vehicle = JSON.parse(data.toString());
+
+        const now = helpers.txNowIso(ctx);
+        const tsNow = Date.parse(now);
+        if (!Number.isFinite(tsNow)) throw new Error('Invalid tx timestamp');
+
+        const windowStart = tsNow - 10 * 60 * 1000; // 10 minutes
+        const oneDayAgo = tsNow - 24 * 60 * 60 * 1000; // 1 day
+
+        const votes = Array.isArray(vehicle.neighborArray)
+            ? vehicle.neighborArray
+            : [];
+
+        // Filter votes in 10-min window for evaluation
+        const windowVotes = votes.filter((e) => {
+            const t = Date.parse(e && e.timestamp);
+            return Number.isFinite(t) && t >= windowStart && t <= tsNow;
+        });
+
+        let decision = 'no-change';
+        let delta = 0;
+
+        if (windowVotes.length > 0) {
+            const ones = windowVotes.filter((e) => Number(e.vote) === 1);
+            const zeros = windowVotes.filter((e) => Number(e.vote) !== 1);
+
+            if (zeros.length > ones.length) {
+                // Majority 0: penalize
+                decision = 'penalized-majority0';
+                delta = -1;
+            } else if (ones.length > zeros.length) {
+                // Majority 1: no change
+                decision = 'no-penalty-majority1';
+                delta = 0;
+            } else {
+                // Tie: no change
+                decision = 'no-majority';
+                delta = 0;
+            }
+        } else {
+            decision = 'no-votes';
+        }
+
+        const before = Number(vehicle.trustedScoreWromehole);
+        const after = Math.max(0, before + delta);
+        if (delta !== 0) {
+            vehicle.trustedScoreWromehole = after;
+        }
+
+        // Update overallTrustScore: average of all 5 trust scores
+        const scores = [
+            Number(vehicle.trustedScoreSybil),
+            Number(vehicle.trustedScoreWromehole),
+            Number(vehicle.trustScoreBlackhole),
+            Number(vehicle.trustScorePoison),
+            Number(vehicle.trustScoreReplay),
+        ];
+        const valid = scores.filter((n) => Number.isFinite(n));
+        const overall = valid.length
+            ? valid.reduce((a, b) => a + b, 0) / valid.length
+            : 0;
+        vehicle.overallTrustScore = Math.round(overall);
+
+        // Purge votes older than 1 day
+        const purged = votes.filter((e) => {
+            const t = Date.parse(e && e.timestamp);
+            return Number.isFinite(t) && t > oneDayAgo;
+        });
+        const purgeCount = votes.length - purged.length;
+        vehicle.neighborArray = purged;
+
+        await ctx.stub.putState(vehKey, Buffer.from(JSON.stringify(vehicle)));
+
+        return JSON.stringify({
+            vin,
+            decision,
+            before,
+            after: vehicle.trustedScoreWromehole,
+            delta,
+            considered: windowVotes.length,
+            overallTrustScore: vehicle.overallTrustScore,
+            purgedVotes: purgeCount,
+        });
+    },
 };

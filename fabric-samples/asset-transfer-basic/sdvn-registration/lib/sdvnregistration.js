@@ -351,6 +351,17 @@ class SdvNRegistration extends Contract {
         );
     }
 
+    // ---------- V3.0 Wormhole APIs (controller-only simplified voting) ----------
+    // Controller: store a simplified vote (vote, timestamp) for a VIN
+    async storeNeighborVoteV3(ctx, vin, vote, timestamp) {
+        return wormhole.storeNeighborVoteV3(ctx, this, vin, vote, timestamp);
+    }
+
+    // Controller: cross-validate using votes from last 10 mins, update overallTrustScore, purge old votes
+    async crossValidationV3(ctx, vin) {
+        return wormhole.crossValidationV3(ctx, this, vin);
+    }
+
     // ---------- Blackhole-related APIs (delegating to lib/blackhole.js) ----------
     // Vehicle: submit a binary vote (1/0) about a VIN
     async storeBlackholeNeighborVote(ctx, vin, neighborId, vote, timestamp) {
