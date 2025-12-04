@@ -249,7 +249,7 @@ module.exports = {
         const tsNow = Date.parse(now);
         if (!Number.isFinite(tsNow)) throw new Error('Invalid tx timestamp');
 
-        const windowStart = tsNow - 10 * 60 * 1000; // 10 minutes
+        const windowStart = tsNow - 60 * 60 * 1000; // 60 minutes
         const oneDayAgo = tsNow - 24 * 60 * 60 * 1000; // 1 day
 
         const votes = Array.isArray(vehicle.neighborArray)
