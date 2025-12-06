@@ -518,6 +518,27 @@ app.post("/vehicles/:vin/poison/cross-validate", async (req, res, next) => {
   }
 });
 
+// Controller: manually reduce trustScorePoison by delta (default 1)
+app.post("/vehicles/:vin/poison/reduce", async (req, res, next) => {
+  try {
+    const { vin } = req.params;
+    const { userId, delta, orgID = "Org1" } = req.body || {};
+    if (!userId) {
+      return res.status(400).send("userId is required");
+    }
+    const result = await invoke.invokeTransactionArgs(
+      "reducePoisonScore",
+      [vin, String(delta ?? "")],
+      userId,
+      orgID,
+      "sdvn"
+    );
+    res.status(200).send({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Error handler
 app.use((err, req, res, next) => {
   res.status(400).send(err.message);

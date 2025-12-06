@@ -426,6 +426,11 @@ class SdvNRegistration extends Contract {
         );
     }
 
+    // Controller: manually reduce trustScorePoison by delta (default 1)
+    async reducePoisonScore(ctx, vin, delta) {
+        return poison.reduceTrustScorePoison(ctx, this, vin, delta);
+    }
+
     // ---------- Replay attack mitigation APIs (delegating to lib/replay.js) ----------
     // Vehicle: receiver stores a flowId for the given sender VIN
     async storeFlowIdReplay(ctx, senderVin, flowId, timestamp) {

@@ -249,4 +249,40 @@ module.exports = {
             overallAfter: vehicle.overallTrustScore,
         });
     },
+
+    /**
+     * Controller-only: manually reduce trustScorePoison for a VIN by `delta` (default 1).
+     * Also updates the stored `overallTrustScore` field on the vehicle record.
+     */
+    async reduceTrustScorePoison(ctx, helpers, vin, delta) {
+        helpers.requireRole(ctx, ['controller']);
+        if (!vin) throw new Error('vin is required');
+
+        const vehKey = helpers.keyForVehicle(vin);
+        const data = await ctx.stub.getState(vehKey);
+        if (!data || !data.length) throw new Error(`Vehicle ${vin} not found`);
+        const vehicle = JSON.parse(data.toString());
+
+        const reduceBy = Math.max(0, Number(delta) || 1);
+
+        const before = toNumberOrZero(vehicle.trustScorePoison);
+        const after = Math.max(0, before - reduceBy);
+        vehicle.trustScorePoison = after;
+
+        // Update stored overallTrustScore for convenience
+        const overallBefore = toNumberOrZero(vehicle.overallTrustScore);
+        const overallAfter = computeOverallTrust(vehicle);
+        vehicle.overallTrustScore = overallAfter;
+
+        await ctx.stub.putState(vehKey, Buffer.from(JSON.stringify(vehicle)));
+        return JSON.stringify({
+            vin,
+            action: 'reduced-poison',
+            before,
+            after,
+            delta: -reduceBy,
+            overallBefore,
+            overallAfter,
+        });
+    },
 };
